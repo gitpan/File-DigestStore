@@ -17,7 +17,7 @@ my($store, $id, $id2);
 eval {
   $store = new File::DigestStore;
 };
-like($@, qr/^Must define root /, "ensure root is not optional");
+like($@, qr/^Attribute \(root\) is required /, "ensure root is not optional");
 
 $store = new File::DigestStore root => $tmp;
 

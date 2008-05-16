@@ -1,13 +1,14 @@
 package File::DigestStore;
 
 use vars qw( $VERSION );
-$VERSION = '1.001';
+$VERSION = '1.002';
 
-use fields qw( root levels algorithm dir_mask file_mask _nhash );
+use Moose;
+use Moose::Util::TypeConstraints;
 
 use Carp;
 
-use Path::Class qw( file dir );
+use Path::Class qw/ dir file /;
 
 use IO::File;
 
@@ -16,6 +17,27 @@ use Digest;
 
 use Sys::Hostname;
 my $hostname = hostname;
+
+
+
+subtype 'octal_mode'
+  => as 'Int';
+coerce 'octal_mode'
+  => from 'Str' => via { /^0/ ? oct $_ : $_ };
+
+subtype 'Path::Class::Dir'
+  => as 'Object';
+coerce 'Path::Class::Dir'
+  => from 'Str' => via { dir $_ };
+
+# FIXME: remember to test octal coercion actually works
+
+has 'root' => (is => 'ro', isa => 'Path::Class::Dir', coerce => 1, required => 1);
+has 'levels' => (is => 'ro', default => '8,256');
+has 'algorithm' => (is => 'ro', default => 'SHA-512');
+has 'dir_mask' => (is => 'ro', isa => 'octal_mode', coerce => 1, default => 0777);
+has 'file_mask' => (is => 'ro', isa => 'octal_mode', coerce => 1, default => 0666);
+has '_nhash' => (is => 'rw');
 
 =head1 NAME
 
@@ -92,38 +114,19 @@ setting so the default is usually fine.
 
 =cut
 
-sub new {
-  my File::DigestStore $self = shift;
-  my %args = ref $_[0] ? %{ $_[0] } : @_;
-  $self = fields::new($self) unless ref $self;
+around new => sub {
+  my($next) = shift;
+  my($self) = shift;
 
-  # this should give an error if a bad arg was given
-  $self->{$_} = $args{$_} foreach keys %args;
-
-  croak "Must define root"
-    unless defined $self->{root};
-  $self->{levels} ||= '8,256';
-  $self->{algorithm} ||= 'SHA-512';
-
-  # If a string is provided turn into a Path::Class
-  $self->{root} = dir $self->{root}
-    unless ref $self->{root};
+  $self = $self->$next(@_);
 
   # FIXME: do something sane when *no* storage levels are defined
   my @buckets = split /,/, $self->{levels};
   #$self->{_buckets} = \@buckets;
   $self->{_nhash} = new Algorithm::Nhash @buckets;
 
-  $self->{dir_mask} ||= 0777;
-  $self->{file_mask} ||= 0666;
-
-  # decode octal modes if necessary
-  for($self->{dir_mask}, $self->{file_mask}) {
-    $_ = oct if /^0/;
-  }
-
   return $self;
-}
+};
 
 my $digest2path = sub {
   my($self, $digest) = @_;

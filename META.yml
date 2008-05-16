@@ -13,6 +13,11 @@ no_index:
   directory:
     - inc
     - t
+recommends:
+  Digest::SHA: 0
 requires:
   Algorithm::Nhash: 0
-version: 1.001
+  Digest: 0
+  Moose: 0
+  Path::Class: 0
+version: 1.002
