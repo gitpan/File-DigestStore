@@ -1,43 +1,36 @@
 package File::DigestStore;
 
 use vars qw( $VERSION );
-$VERSION = '1.002';
-
-use Moose;
-use Moose::Util::TypeConstraints;
-
-use Carp;
-
-use Path::Class qw/ dir file /;
-
-use IO::File;
+$VERSION = '1.003';
 
 use Algorithm::Nhash;
+use Carp;
 use Digest;
-
+use File::Slurp;
+use Moose::Util::TypeConstraints;
+use Moose;
+use Path::Class qw/ dir file /;
 use Sys::Hostname;
 my $hostname = hostname;
 
+sub _type($) { sprintf '%s.%s', __PACKAGE__, @_ }
 
+subtype _type 'octal_mode' => as 'Int';
+coerce _type 'octal_mode'  => from 'Str' => via { /^0/ ? oct $_ : $_ };
 
-subtype 'octal_mode'
-  => as 'Int';
-coerce 'octal_mode'
-  => from 'Str' => via { /^0/ ? oct $_ : $_ };
-
-subtype 'Path::Class::Dir'
-  => as 'Object';
-coerce 'Path::Class::Dir'
-  => from 'Str' => via { dir $_ };
+subtype _type 'dir' => as 'Object';
+coerce _type 'dir'  => from 'Str' => via { dir $_ };
 
 # FIXME: remember to test octal coercion actually works
 
-has 'root' => (is => 'ro', isa => 'Path::Class::Dir', coerce => 1, required => 1);
-has 'levels' => (is => 'ro', default => '8,256');
+has 'root'      => (is => 'ro', isa => _type 'dir',
+                    coerce => 1, required => 1);
+has 'levels'    => (is => 'ro', default => '8,256');
 has 'algorithm' => (is => 'ro', default => 'SHA-512');
-has 'dir_mask' => (is => 'ro', isa => 'octal_mode', coerce => 1, default => 0777);
-has 'file_mask' => (is => 'ro', isa => 'octal_mode', coerce => 1, default => 0666);
-has '_nhash' => (is => 'rw');
+has 'dir_mask'  => (is => 'ro', isa => _type 'octal_mode',
+                    coerce => 1, default => 0777);
+has 'file_mask' => (is => 'ro', isa => _type 'octal_mode',
+                    coerce => 1, default => 0666);
 
 =head1 NAME
 
@@ -114,19 +107,14 @@ setting so the default is usually fine.
 
 =cut
 
-around new => sub {
-  my($next) = shift;
+sub BUILD {
   my($self) = shift;
-
-  $self = $self->$next(@_);
 
   # FIXME: do something sane when *no* storage levels are defined
   my @buckets = split /,/, $self->{levels};
-  #$self->{_buckets} = \@buckets;
   $self->{_nhash} = new Algorithm::Nhash @buckets;
-
-  return $self;
-};
+}
+;
 
 my $digest2path = sub {
   my($self, $digest) = @_;
@@ -135,20 +123,6 @@ my $digest2path = sub {
               $self->{_nhash}->nhash($digest),
               $digest,
              );
-};
-
-# FIXME/TESTME: zero length files causes $readfile to fail
-
-my $readfile = sub {
-  my($self, $path) = @_;
-
-  # FIXME: is this good enough to avoid dirs?
-  -f $path or die "Can't read $path: not a file";
-  my $fh = new IO::File $path, 'r'
-    or die "Can't read $path: $!";
-  $fh->binmode;
-  local $/;
-  return "".<$fh>;
 };
 
 =item B<store_file>
@@ -166,7 +140,7 @@ latter saves you having to stat() your file.)
 sub store_file {
   my($self, $path) = @_;
 
-  return $self->store_string($self->$readfile($path));
+  return $self->store_string(scalar read_file($path));
 }
 
 =item B<store_string>
@@ -190,27 +164,17 @@ sub store_string {
   my $digest = $digester->hexdigest;
   my $path = $self->$digest2path($digest);
 
-  unless(-e $path) { # skip rewrite if the file already exists
+  unless(-e $path) {            # skip rewrite if the file already exists
     my $parent = $path->dir;
     $parent->mkpath(0, $self->{dir_mask})
       unless -d $parent;
-    
-    my $unique = file($path->dir, $path->basename.".$hostname.$$");
-    
-    my $mode = O_WRONLY | O_CREAT;
-    # FIXME: enable clobber and various other safety strategies
-    #$mode |= O_EXCL unless $mayclobber;
-    
-    my $fh = new IO::File $unique, $mode, $self->{file_mask}
-      or die "Can't create $unique: $!";
-    $fh->binmode;
-    print $fh $string;
-    $fh->close;
-    
-    rename $unique, $path
-      or die "Could not rename $unique to $path: $!";
+
+    write_file($path, { binmode => ':raw',
+                        atomic => 1,
+                        perms => $self->{file_mask} },
+               $string);
   }
-    
+
   return wantarray ? ($digest, length $string) : $digest;
 }
 
@@ -248,7 +212,7 @@ sub fetch_string {
 
   my $path = $self->$digest2path($digest);
   return unless -f $path;
-  return $self->$readfile($path);
+  return read_file($path);
 }
 
 =item B<exists>
