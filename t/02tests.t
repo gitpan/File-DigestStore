@@ -33,7 +33,7 @@ ok(!$store->exists($id), 'exists() returns false for invalid ID');
 eval {
   $id = $store->store_file("$tmp/this/is/an/invalid/filename");
 };
-like($@, qr/^Can't read /, "fails on unreadable file");
+like($@, qr/No such file or directory/, "fails on unreadable file");
 
 foreach my $string ('', 'Hello, world') {
   $id = $store->store_string($string);

@@ -1,7 +1,7 @@
 package File::DigestStore;
 
 use vars qw( $VERSION );
-$VERSION = '1.003';
+$VERSION = '1.004';
 
 use Algorithm::Nhash;
 use Carp;
@@ -140,7 +140,7 @@ latter saves you having to stat() your file.)
 sub store_file {
   my($self, $path) = @_;
 
-  return $self->store_string(scalar read_file($path));
+  return $self->store_string(scalar read_file("$path"));
 }
 
 =item B<store_string>
@@ -169,7 +169,9 @@ sub store_string {
     $parent->mkpath(0, $self->{dir_mask})
       unless -d $parent;
 
-    write_file($path, { binmode => ':raw',
+    # File::Slurp goes funny if it gets a Path::Class::File instead of a
+    # string as the first argument, so we stringify it.
+    write_file("$path", { binmode => ':raw',
                         atomic => 1,
                         perms => $self->{file_mask} },
                $string);
@@ -212,7 +214,7 @@ sub fetch_string {
 
   my $path = $self->$digest2path($digest);
   return unless -f $path;
-  return read_file($path);
+  return read_file("$path");
 }
 
 =item B<exists>

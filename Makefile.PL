@@ -8,6 +8,8 @@ requires 'Algorithm::Nhash';
 requires 'Digest';
 requires 'Path::Class';
 requires 'Moose';
+requires 'Moose::Util::TypeConstraints';
+requires 'File::Slurp';
 
 recommends 'Digest::SHA';
 
