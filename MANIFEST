@@ -1,3 +1,4 @@
+Build.PL
 inc/Module/Install.pm
 inc/Module/Install/Base.pm
 inc/Module/Install/Can.pm
@@ -7,9 +8,14 @@ inc/Module/Install/Metadata.pm
 inc/Module/Install/Win32.pm
 inc/Module/Install/WriteAll.pm
 lib/File/DigestStore.pm
-Makefile.PL
 MANIFEST			This list of files
 META.yml
-t/00use.t
-t/01podcoverage.t
-t/02tests.t
+t/00_load.t
+t/lib/Test/File/DigestStore.pm
+t/lib/Test/File/DigestStore2.pm
+t/Test::CheckManifest.t
+t/Test::File::DigestStore.t
+t/Test::Pod.t
+t/Test::Pod::Coverage.t
+Makefile.PL
+README
