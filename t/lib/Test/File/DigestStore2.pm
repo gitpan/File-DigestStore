@@ -23,7 +23,7 @@ sub teardown : Test(teardown) {
     my $store = $self->{store};
     return unless $store;
     system (rm => -rf => $store->root)
-      if defined $store->root;
+        if defined $store->root;
     delete $self->{store};
 }
 
@@ -33,19 +33,19 @@ sub ctor_requires_root : Test(no_plan) {
     throws_ok( sub { $self->{store} = File::DigestStore->new },
                qr/^Attribute \(root\) is required /,
                'ensure root is not optional' );
-};
+}
 
 sub ctor_requires_levels : Test(no_plan) {
     my($self) = @_;
 
     my $store = $self->{store}
-      = File::DigestStore->new( root => $self->{tmp},
-                                levels => '' );
+        = File::DigestStore->new( root => $self->{tmp},
+                                  levels => '' );
     # FIXME: new() should throw instead
     throws_ok( sub { $store->nhash },
                qr/^At least one storage level is required /,
                'check for empty storage levels' );
-};
+}
 
 # we're mostly doing tests for the octal_mode type because Moose
 # occasionally fights back and breaks the coercion code. This tests that the
@@ -55,10 +55,10 @@ sub octal1 : Test(no_plan) {
     my($self) = @_;
 
     my $store = $self->{store}
-      = File::DigestStore->new(root => $self->{tmp},
-                               dir_mask => 0750,
-                               file_mask => 0640
-                              );
+        = File::DigestStore->new(root => $self->{tmp},
+                                 dir_mask => 0750,
+                                 file_mask => 0640
+                             );
 
     is($store->dir_mask, 0750, 'dir_mask');
     is($store->file_mask, 0640, 'file_mask');
@@ -68,10 +68,10 @@ sub octal2 : Test(no_plan) {
     my($self) = @_;
 
     my $store = $self->{store}
-      = File::DigestStore->new(root => $self->{tmp},
-                               dir_mask => '0750',
-                               file_mask => '0640'
-                              );
+        = File::DigestStore->new(root => $self->{tmp},
+                                 dir_mask => '0750',
+                                 file_mask => '0640'
+                             );
 
     is($store->dir_mask, 0750, 'dir_mask');
     is($store->file_mask, 0640, 'file_mask');
@@ -83,10 +83,10 @@ sub mask {
     my $oldmask = umask $umask;
 
     my $store = $self->{store}
-      = File::DigestStore->new(root => $self->{tmp},
-                               dir_mask => 0750,
-                               file_mask => 0640
-                              );
+        = File::DigestStore->new(root => $self->{tmp},
+                                 dir_mask => 0750,
+                                 file_mask => 0640
+                             );
 
     # store test data and obtain its path
     my $id = $store->store_string('test');

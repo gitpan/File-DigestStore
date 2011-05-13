@@ -1,8 +1,11 @@
 package File::DigestStore;
-
-use vars qw( $VERSION );
-$VERSION = '1.005';
-
+BEGIN {
+  $File::DigestStore::DIST = 'File-DigestStore';
+}
+BEGIN {
+  $File::DigestStore::VERSION = '1.006';
+}
+# ABSTRACT: Digested hierarchical storage of files
 use Algorithm::Nhash;
 use Carp;
 use Digest;
@@ -19,22 +22,156 @@ my $hostname = hostname;
 subtype OctalMode, as Int, where { not /^0/ };
 coerce OctalMode, from Str, via { oct $_ };
 
-has 'root'      => (is => 'ro', isa => 'Path::Class::Dir',
+has root      => (is => 'ro', isa => 'Path::Class::Dir',
                     coerce => 1, required => 1);
-has 'levels'    => (is => 'ro', isa => Str, default => '8,256');
-has 'algorithm' => (is => 'ro', isa => Str, default => 'SHA-512');
-has 'dir_mask'  => (is => 'ro', isa => OctalMode,
-                    coerce => 1, default => 0777);
-has 'file_mask' => (is => 'ro', isa => OctalMode,
-                    coerce => 1, default => 0666);
-has 'layers'    => ( is => 'ro', isa => Str, default => ':raw' );
+has levels    => (is => 'ro', isa => Str, default => '8,256');
+has algorithm => (is => 'ro', isa => Str, default => 'SHA-512');
+has dir_mask  => (is => 'ro', isa => OctalMode,
+                    coerce => 1, default => '0777');
+has file_mask => (is => 'ro', isa => OctalMode,
+                    coerce => 1, default => '0666');
+has layers    => ( is => 'ro', isa => Str, default => ':raw' );
 
 # private attribute
-has 'nhash' => ( is => 'ro', isa => 'Algorithm::Nhash', lazy_build => 1 );
+has nhash => ( is => 'ro', isa => 'Algorithm::Nhash', lazy_build => 1 );
+
+
+
+my $digest2path = sub {
+    my($self, $digest) = @_;
+
+    return file(
+        $self->root,
+        $self->nhash->nhash($digest),
+        $digest,
+    );
+};
+
+my $readfile = sub {
+    my($self, $path) = @_;
+
+    my $fh = IO::File->new($path, 'r')
+        or croak "Can't read $path: $!";
+    $fh->binmode($self->layers);
+    local $\;
+    # prepending "" covers the case of an empty file, otherwise we'd get undef
+    return "".<$fh>;
+};
+
+my $writefile = sub {
+    my($self, $path, $string) = @_;
+
+    my $unique = file($path->dir, $path->basename.".$hostname.$$");
+    my $mode = O_WRONLY | O_CREAT | O_EXCL;
+    my $fh = IO::File->new($unique, $mode, $self->{file_mask})
+        or die "Can't create $unique: $!";
+    $fh->binmode($self->layers);
+    print $fh $string;
+    $fh->close;
+
+    rename $unique, $path
+        or die "Could not rename $unique to $path: $!";
+};
+
+
+sub store_file {
+    my($self, $path) = @_;
+
+    return $self->store_string($self->$readfile($path));
+}
+
+
+sub store_string {
+    my($self, $string) = @_;
+
+    croak "Can't store an undefined value"
+        unless defined $string;
+
+    my $digester = Digest->new($self->algorithm);
+    $digester->add($string);
+    my $digest = $digester->hexdigest;
+    my $path = $self->$digest2path($digest);
+
+    unless(-e $path) {          # skip rewrite if the file already exists
+        my $parent = $path->dir;
+        $parent->mkpath(0, $self->dir_mask)
+            unless -d $parent;
+
+        $self->$writefile($path, $string);
+    }
+    return wantarray ? ($digest, length $string) : $digest;
+}
+
+
+sub fetch_path {
+    my($self, $digest) = @_;
+
+    croak "Can't fetch an undefined ID"
+        unless defined $digest;
+
+    my $path = $self->$digest2path($digest);
+    return unless -f $path;
+    return $path;
+}
+
+
+sub fetch_string {
+    my($self, $digest) = @_;
+
+    my $path = $self->$digest2path($digest);
+    return unless -f $path;
+    return $self->$readfile($path);
+}
+
+
+sub exists {
+    my($self, $digest) = @_;
+
+    my $path = $self->$digest2path($digest);
+    return -f $path;
+}
+
+#FIXME
+#sub delete {
+#  my($self, $digest) = @_;
+#
+#  die "FIXME";
+#}
+
+
+my $fetch_file_called;
+
+sub fetch_file {
+    carp "Deprecated fetch_file() called"
+        unless $fetch_file_called++;
+    goto &fetch_path;
+}
+
+sub _build_nhash {
+    my($self) = shift;
+
+    my @buckets = split /,/, $self->levels;
+    # bail if there are no storage levels; it's not terribly useful and
+    # Algorithm::Nhash::nhash() doesn't return an empty path in this case.
+    croak "At least one storage level is required"
+        unless @buckets;
+
+    return Algorithm::Nhash->new(@buckets);
+}
+
+
+1;
+
+__END__
+=pod
 
 =head1 NAME
 
 File::DigestStore - Digested hierarchical storage of files
+
+=head1 VERSION
+
+version 1.006
 
 =head1 SYNOPSIS
 
@@ -130,44 +267,6 @@ This creates a handle to a new digested storage area. Arguments are given to
 it to define the layout of the storage area. See "MOOSE FIELDS" above for
 the available options.
 
-=cut
-
-
-my $digest2path = sub {
-    my($self, $digest) = @_;
-
-    return file($self->root,
-                $self->nhash->nhash($digest),
-                $digest,
-               );
-};
-
-my $readfile = sub {
-    my($self, $path) = @_;
-
-    my $fh = IO::File->new($path, 'r')
-      or croak "Can't read $path: $!";
-    $fh->binmode($self->layers);
-    local $\;
-    # prepending "" covers the case of an empty file, otherwise we'd get undef
-    return "".<$fh>;
-};
-
-my $writefile = sub {
-    my($self, $path, $string) = @_;
-
-    my $unique = file($path->dir, $path->basename.".$hostname.$$");
-    my $mode = O_WRONLY | O_CREAT | O_EXCL;
-    my $fh = IO::File->new($unique, $mode, $self->{file_mask})
-      or die "Can't create $unique: $!";
-    $fh->binmode($self->layers);
-    print $fh $string;
-    $fh->close;
-
-    rename $unique, $path
-      or die "Could not rename $unique to $path: $!";
-};
-
 =head2 store_file
 
  my $id = $store->store_file('/etc/motd');
@@ -178,14 +277,6 @@ This copies the file's contents into the stash. In scalar context it returns
 the file's ID. In list context it returns an (ID, file size) tuple. (The
 latter saves you having to stat() your file.)
 
-=cut
-
-sub store_file {
-    my($self, $path) = @_;
-
-    return $self->store_string($self->$readfile($path));
-}
-
 =head2 store_string
 
  my $id = $store->store_string('Hello, world');
@@ -193,29 +284,6 @@ sub store_file {
 This copies the string's contents into the stash. In scalar context it
 returns the file's ID. In list context it returns an (ID, string length)
 tuple.
-
-=cut
-
-sub store_string {
-    my($self, $string) = @_;
-
-    croak "Can't store an undefined value"
-      unless defined $string;
-
-    my $digester = Digest->new($self->algorithm);
-    $digester->add($string);
-    my $digest = $digester->hexdigest;
-    my $path = $self->$digest2path($digest);
-
-    unless(-e $path) {          # skip rewrite if the file already exists
-        my $parent = $path->dir;
-        $parent->mkpath(0, $self->dir_mask)
-          unless -d $parent;
-
-        $self->$writefile($path, $string);
-    }
-    return wantarray ? ($digest, length $string) : $digest;
-}
 
 =head2 fetch_path
 
@@ -227,35 +295,12 @@ if no file with that ID has ever been stored.
 Note that the path refers to the master copy of the file within the stash so
 you will need to copy the file if you are going to potentially modify it.
 
-=cut
-
-sub fetch_path {
-    my($self, $digest) = @_;
-
-    croak "Can't fetch an undefined ID"
-      unless defined $digest;
-
-    my $path = $self->$digest2path($digest);
-    return unless -f $path;
-    return $path;
-}
-
 =head2 fetch_string
 
  my $string = $store->fetch_string($id);
 
 Given an ID, will return the string which was previously stashed to that ID
 or undef if no string with that ID has ever been stored.
-
-=cut
-
-sub fetch_string {
-    my($self, $digest) = @_;
-
-    my $path = $self->$digest2path($digest);
-    return unless -f $path;
-    return $self->$readfile($path);
-}
 
 =head2 exists
 
@@ -266,22 +311,6 @@ sub fetch_string {
 Returns true if anything was stashed with this the given ID, otherwise
 false.
 
-=cut
-
-sub exists {
-    my($self, $digest) = @_;
-
-    my $path = $self->$digest2path($digest);
-    return -f $path;
-}
-
-#FIXME
-#sub delete {
-#  my($self, $digest) = @_;
-#
-#  die "FIXME";
-#}
-
 =head2 DEPRECATED METHODS
 
 =head2 fetch_file
@@ -289,31 +318,9 @@ sub exists {
 fetch_path was originally called this, but the name is inappropriate since
 it implies that it fetches the file and not just the file's name.
 
-=cut
-
-my $fetch_file_called;
-
-sub fetch_file {
-    carp "Deprecated fetch_file() called"
-      unless $fetch_file_called++;
-    goto &fetch_path;
-}
-
-sub _build_nhash {
-    my($self) = shift;
-
-    my @buckets = split /,/, $self->levels;
-    # bail if there are no storage levels; it's not terribly useful and
-    # Algorithm::Nhash::nhash() doesn't return an empty path in this case.
-    croak "At least one storage level is required"
-      unless @buckets;
-
-    return Algorithm::Nhash->new(@buckets);
-}
-
 =head1 BUGS
 
-This does not currently check for hash collisions.
+This does not provide any means to check for hash collisions.
 
 You cannot provide a hashing algorithm that is not a Digest::* derivative.
 
@@ -323,20 +330,14 @@ File::HStore implements a similar idea.
 
 =head1 AUTHOR
 
-All code and documentation by Peter Corlett <abuse@cabal.org.uk>.
+Peter Corlett <abuse@cabal.org.uk>
 
-=head1 COPYRIGHT
+=head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2008,2010 Peter Corlett <abuse@cabal.org.uk>. All rights
-reserved.
+This software is copyright (c) 2011 by Peter Corlett.
 
-This program is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself.
-
-=head1 SUPPORT / WARRANTY
-
-This is free software. IT COMES WITHOUT WARRANTY OF ANY KIND.
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
 
 =cut
 
-1;

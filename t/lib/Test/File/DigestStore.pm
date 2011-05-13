@@ -21,7 +21,7 @@ sub shutdown : Test(shutdown) {
     my($self) = @_;
 
     system (rm => -rf => $self->{tmp})
-      if defined $self->{tmp};
+        if defined $self->{tmp};
 }
 
 sub stable_file_hash : Test(no_plan) {
@@ -101,7 +101,7 @@ sub warn_fetch_file : Test(no_plan) {
     my $warn_count = 0;
     local $SIG{__WARN__} = sub {
         my($warning) = @_;
-        if($warning =~ /^Deprecated fetch_file\(\) called/) {
+        if ($warning =~ /^Deprecated fetch_file\(\) called/) {
             $warn_count++;
         } else {
             die "unexpected warning $warning";

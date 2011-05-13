@@ -1,0 +1,4 @@
+Revision history for File-DigestStore
+
+1.006     2011-05-13 19:54:34 Europe/London
+        updated distribution to use Dist::Zilla
