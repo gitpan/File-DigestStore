@@ -2,47 +2,49 @@
 use strict;
 use warnings;
 
-BEGIN { require 5.006; }
+use 5.006;
 
 use ExtUtils::MakeMaker 6.30;
 
 
 
 my %WriteMakefileArgs = (
-  'ABSTRACT' => 'Digested hierarchical storage of files',
-  'AUTHOR' => 'Peter Corlett <abuse@cabal.org.uk>',
-  'BUILD_REQUIRES' => {
-    'English' => '0',
-    'File::Find' => '0',
-    'File::Temp' => '0',
-    'File::stat' => '0',
-    'Test::Class' => '0',
-    'Test::Exception' => '0',
-    'Test::More' => '0'
+  "ABSTRACT" => "Digested hierarchical storage of files",
+  "AUTHOR" => "Peter Corlett <abuse\@cabal.org.uk>",
+  "BUILD_REQUIRES" => {
+    "English" => 0,
+    "File::Find" => 0,
+    "File::Temp" => 0,
+    "File::stat" => 0,
+    "Moose::Role" => 0,
+    "Test::Class" => 0,
+    "Test::Exception" => 0,
+    "Test::More" => 0,
+    "strict" => 0,
+    "warnings" => 0
   },
-  'CONFIGURE_REQUIRES' => {
-    'ExtUtils::MakeMaker' => '6.30'
+  "CONFIGURE_REQUIRES" => {
+    "ExtUtils::MakeMaker" => "6.30"
   },
-  'DISTNAME' => 'File-DigestStore',
-  'EXE_FILES' => [],
-  'LICENSE' => 'perl',
-  'NAME' => 'File::DigestStore',
-  'PREREQ_PM' => {
-    'Algorithm::Nhash' => '0',
-    'Carp' => '0',
-    'Digest' => '0',
-    'IO::File' => '0',
-    'Moose' => '0',
-    'Moose::Util::TypeConstraints' => '0',
-    'MooseX::Types' => '0',
-    'MooseX::Types::Moose' => '0',
-    'MooseX::Types::Path::Class' => '0',
-    'Path::Class' => '0',
-    'Sys::Hostname' => '0'
+  "DISTNAME" => "File-DigestStore",
+  "EXE_FILES" => [],
+  "LICENSE" => "perl",
+  "NAME" => "File::DigestStore",
+  "PREREQ_PM" => {
+    "Algorithm::Nhash" => 0,
+    "Digest" => 0,
+    "IO::File" => 0,
+    "Moose" => 0,
+    "Moose::Util::TypeConstraints" => 0,
+    "MooseX::Types" => 0,
+    "MooseX::Types::Moose" => 0,
+    "MooseX::Types::Path::Class" => 0,
+    "Path::Class" => 0,
+    "Sys::Hostname" => 0
   },
-  'VERSION' => '1.006',
-  'test' => {
-    'TESTS' => 't/*.t'
+  "VERSION" => "1.007",
+  "test" => {
+    "TESTS" => "t/*.t"
   }
 );
 

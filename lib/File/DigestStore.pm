@@ -1,13 +1,12 @@
 package File::DigestStore;
-BEGIN {
+{
   $File::DigestStore::DIST = 'File-DigestStore';
 }
-BEGIN {
-  $File::DigestStore::VERSION = '1.006';
+{
+  $File::DigestStore::VERSION = '1.007';
 }
 # ABSTRACT: Digested hierarchical storage of files
 use Algorithm::Nhash;
-use Carp;
 use Digest;
 use MooseX::Types -declare => [qw/ OctalMode /];
 use MooseX::Types::Moose qw/ Int Str Value /;
@@ -19,25 +18,136 @@ use IO::File;
 use Sys::Hostname;
 my $hostname = hostname;
 
-subtype OctalMode, as Int, where { not /^0/ };
+subtype OctalMode, as Int, where { not /^0\d/ };
 coerce OctalMode, from Str, via { oct $_ };
 
-has root      => (is => 'ro', isa => 'Path::Class::Dir',
-                    coerce => 1, required => 1);
+has root      => (is => 'ro', isa => 'Path::Class::Dir', coerce => 1, required => 1);
 has levels    => (is => 'ro', isa => Str, default => '8,256');
 has algorithm => (is => 'ro', isa => Str, default => 'SHA-512');
-has dir_mask  => (is => 'ro', isa => OctalMode,
-                    coerce => 1, default => '0777');
-has file_mask => (is => 'ro', isa => OctalMode,
-                    coerce => 1, default => '0666');
-has layers    => ( is => 'ro', isa => Str, default => ':raw' );
+has dir_mask  => (is => 'ro', isa => OctalMode, coerce => 1, default => '0777');
+has file_mask => (is => 'ro', isa => OctalMode, coerce => 1, default => '0666');
+has layers    => (is => 'ro', isa => Str, default => ':raw');
 
 # private attribute
 has nhash => ( is => 'ro', isa => 'Algorithm::Nhash', lazy_build => 1 );
 
 
 
-my $digest2path = sub {
+sub store_path {
+    my($self, $path) = @_;
+
+    confess "Can't store an undefined filename"
+        unless defined $path;
+
+    return $self->store_string($self->_readfile($path));
+}
+
+
+sub store_string {
+    my($self, $string) = @_;
+
+    confess "Can't store an undefined string"
+        unless defined $string;
+    confess "Can't store a reference"
+        if ref $string;
+
+    my $digester = Digest->new($self->algorithm);
+    $digester->add($string);
+    my $digest = $digester->hexdigest;
+    my $path = $self->_digest2path($digest);
+
+    unless(-e $path) {          # skip rewrite if the file already exists
+        my $parent = $path->dir;
+        $parent->mkpath(0, $self->dir_mask)
+            unless -d $parent;
+
+        $self->_writefile($path, $string);
+    }
+    return wantarray ? ($digest, length $string) : $digest;
+}
+
+
+sub fetch_path {
+    my($self, $digest) = @_;
+
+    confess "Can't fetch an undefined ID"
+        unless defined $digest;
+
+    my $path = $self->_digest2path($digest);
+    return unless -f $path;
+    return $path;
+}
+
+
+sub fetch_string {
+    my($self, $digest) = @_;
+
+    confess "Can't fetch an undefined ID"
+        unless defined $digest;
+
+    my $path = $self->_digest2path($digest);
+    return unless -f $path;
+    return $self->_readfile($path);
+}
+
+
+sub exists {
+    my($self, $digest) = @_;
+
+    confess "Can't check an undefined ID"
+        unless defined $digest;
+
+    my $path = $self->_digest2path($digest);
+    return -f $path;
+}
+
+
+sub delete {
+    my($self, $digest) = @_;
+
+    confess "Can't delete an undefined ID"
+        unless defined $digest;
+
+    my $path = $self->_digest2path($digest);
+    unless(unlink $path) {
+        confess "Can't unlink $path: $!"
+            unless $!{ENOENT};
+        return;
+    }
+    return 1;
+}
+
+
+sub fetch_file {
+    Carp::cluck "Deprecated fetch_file() called"
+          unless our $deprecated++;
+    goto &fetch_path;
+}
+
+
+my $deprecated_called;
+
+sub store_file {
+    Carp::cluck "Deprecated store_file() called"
+        unless our $deprecated++;
+    goto &store_path;
+}
+
+
+sub _build_nhash {
+    my($self) = shift;
+
+    my @buckets = split /,/, $self->levels;
+    # bail if there are no storage levels; it's not terribly useful and
+    # Algorithm::Nhash::nhash() doesn't return an empty path in this case.
+    confess "At least one storage level is required"
+        unless @buckets;
+
+    return Algorithm::Nhash->new(@buckets);
+}
+
+
+sub _digest2path {
     my($self, $digest) = @_;
 
     return file(
@@ -47,18 +157,20 @@ my $digest2path = sub {
     );
 };
 
-my $readfile = sub {
+
+sub _readfile {
     my($self, $path) = @_;
 
     my $fh = IO::File->new($path, 'r')
-        or croak "Can't read $path: $!";
+        or confess "Can't read $path: $!";
     $fh->binmode($self->layers);
     local $\;
     # prepending "" covers the case of an empty file, otherwise we'd get undef
     return "".<$fh>;
 };
 
-my $writefile = sub {
+
+sub _writefile {
     my($self, $path, $string) = @_;
 
     my $unique = file($path->dir, $path->basename.".$hostname.$$");
@@ -74,92 +186,6 @@ my $writefile = sub {
 };
 
 
-sub store_file {
-    my($self, $path) = @_;
-
-    return $self->store_string($self->$readfile($path));
-}
-
-
-sub store_string {
-    my($self, $string) = @_;
-
-    croak "Can't store an undefined value"
-        unless defined $string;
-
-    my $digester = Digest->new($self->algorithm);
-    $digester->add($string);
-    my $digest = $digester->hexdigest;
-    my $path = $self->$digest2path($digest);
-
-    unless(-e $path) {          # skip rewrite if the file already exists
-        my $parent = $path->dir;
-        $parent->mkpath(0, $self->dir_mask)
-            unless -d $parent;
-
-        $self->$writefile($path, $string);
-    }
-    return wantarray ? ($digest, length $string) : $digest;
-}
-
-
-sub fetch_path {
-    my($self, $digest) = @_;
-
-    croak "Can't fetch an undefined ID"
-        unless defined $digest;
-
-    my $path = $self->$digest2path($digest);
-    return unless -f $path;
-    return $path;
-}
-
-
-sub fetch_string {
-    my($self, $digest) = @_;
-
-    my $path = $self->$digest2path($digest);
-    return unless -f $path;
-    return $self->$readfile($path);
-}
-
-
-sub exists {
-    my($self, $digest) = @_;
-
-    my $path = $self->$digest2path($digest);
-    return -f $path;
-}
-
-#FIXME
-#sub delete {
-#  my($self, $digest) = @_;
-#
-#  die "FIXME";
-#}
-
-
-my $fetch_file_called;
-
-sub fetch_file {
-    carp "Deprecated fetch_file() called"
-        unless $fetch_file_called++;
-    goto &fetch_path;
-}
-
-sub _build_nhash {
-    my($self) = shift;
-
-    my @buckets = split /,/, $self->levels;
-    # bail if there are no storage levels; it's not terribly useful and
-    # Algorithm::Nhash::nhash() doesn't return an empty path in this case.
-    croak "At least one storage level is required"
-        unless @buckets;
-
-    return Algorithm::Nhash->new(@buckets);
-}
-
-
 1;
 
 __END__
@@ -171,14 +197,14 @@ File::DigestStore - Digested hierarchical storage of files
 
 =head1 VERSION
 
-version 1.006
+version 1.007
 
 =head1 SYNOPSIS
 
  my $store = File::DigestStore->new( root => '/var/lib/digeststore' );
 
  # stores the file and returns a short-ish ID
- my $id = $store->store_file('/etc/motd');
+ my $id = $store->store_path('/etc/motd');
  # Will output a hex string like '110fe...'
  print "$id\n";
  # returns a filename that has the same contents as the stored file
@@ -193,7 +219,7 @@ with a name based on the hashed file contents, returning said hash. This
 hash is much shorter than the data and is much more easily stored in a
 database than the original file. Because of the hashing, only a single copy
 of the data will be stored on disk no matter how many times one calls
-store_file() or store_string().
+store_path() or store_string().
 
 =head1 BACKEND STORAGE
 
@@ -248,14 +274,18 @@ This has the same special-casing for strings as dir_mask.
 
 =head2 layers (optional, default ":raw")
 
-The PerlIO layer to use when storing and retrieving data.
+The PerlIO layer to use when storing and retrieving data. Note that while
+this could be used to set the encoding for string I/O (e.g. with
+store_string()), the Digest algorithms expect your strings to be sequences
+of octets. This is mainly here for if you wish to use a layer that performs
+transparent compression.
 
-=head2 nhash (optional, defaults to an Algorithm::Nhash object)
+=head1 PRIVATE MOOSE FIELDS
+
+=head2 nhash (optional, builds an Algorithm::Nhash based on I<levels>)
 
 This is the internal Algorithm::Nhash object used to convert a file's hash
-into subdirectories. If you're wanting more fine-grained control of the
-choice of directory names, you may wish to drop in an alternative object
-which provides a nhash() method.
+into subdirectories.
 
 =head1 METHODS
 
@@ -267,11 +297,11 @@ This creates a handle to a new digested storage area. Arguments are given to
 it to define the layout of the storage area. See "MOOSE FIELDS" above for
 the available options.
 
-=head2 store_file
+=head2 store_path
 
- my $id = $store->store_file('/etc/motd');
+ my $id = $store->store_path('/etc/motd');
 
- my ($id, $size) = $store->store_file('/etc/passwd');
+ my ($id, $size) = $store->store_path('/etc/passwd');
 
 This copies the file's contents into the stash. In scalar context it returns
 the file's ID. In list context it returns an (ID, file size) tuple. (The
@@ -290,10 +320,8 @@ tuple.
  my $path = $store->fetch_path($id);
 
 Given an ID, will return the path to the stashed copy of the file, or undef
-if no file with that ID has ever been stored.
-
-Note that the path refers to the master copy of the file within the stash so
-you will need to copy the file if you are going to potentially modify it.
+if no file with that ID has ever been stored. Note that the path refers to
+the master copy of the file within the stash and you must not modify it.
 
 =head2 fetch_string
 
@@ -308,15 +336,39 @@ or undef if no string with that ID has ever been stored.
     # ...
  }
 
-Returns true if anything was stashed with this the given ID, otherwise
-false.
+Returns true if anything is stashed with the given ID, otherwise false.
 
-=head2 DEPRECATED METHODS
+=head2 delete (new in 1.007)
+
+ $store->delete($id);
+
+Removes the data stashed with the given ID and returns true if it existed or
+false if it did not.
+
+=head1 DEPRECATED METHODS
 
 =head2 fetch_file
 
 fetch_path was originally called this, but the name is inappropriate since
-it implies that it fetches the file and not just the file's name.
+it implies that it fetches the file rather than just the file's name.
+
+=head2 store_file
+
+store_path was originally called this, but the name is inappropriate since
+it implies that the parameter was the file rather than the file's name.
+
+=head1 PRIVATE METHODS
+
+These methods are I<private> and not for end-users; the API may change
+without notice. If you use them and stuff breaks, it's your own fault.
+
+=head2 _build_nhash
+
+=head2 _digest2path
+
+=head2 _readfile
+
+=head2 _writefile
 
 =head1 BUGS
 

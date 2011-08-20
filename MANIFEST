@@ -7,10 +7,11 @@ README
 dist.ini
 lib/File/DigestStore.pm
 t/00-compile.t
+t/File-DigestStore.t
 t/author-critic.t
-t/digeststore.t
-t/lib/Test/File/DigestStore.pm
-t/lib/Test/File/DigestStore2.pm
+t/lib/File/DigestStore/Test.pm
+t/lib/File/DigestStore/Test/Ctor.pm
+t/lib/File/DigestStore/Test/Storage.pm
 t/release-consistent-version.t
 t/release-cpan-changes.t
 t/release-distmeta.t

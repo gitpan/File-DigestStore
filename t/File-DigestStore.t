@@ -4,6 +4,6 @@ use strict;
 
 use lib qw( t/lib );
 
-use Test::File::DigestStore;
-use Test::File::DigestStore2;
+use File::DigestStore::Test::Ctor;
+use File::DigestStore::Test::Storage;
 Test::Class->runtests();

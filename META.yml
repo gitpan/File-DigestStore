@@ -7,13 +7,16 @@ build_requires:
   File::Find: 0
   File::Temp: 0
   File::stat: 0
+  Moose::Role: 0
   Test::Class: 0
   Test::Exception: 0
   Test::More: 0
+  strict: 0
+  warnings: 0
 configure_requires:
   ExtUtils::MakeMaker: 6.30
 dynamic_config: 0
-generated_by: 'Dist::Zilla version 4.200006, CPAN::Meta::Converter version 2.110930'
+generated_by: 'Dist::Zilla version 4.300000, CPAN::Meta::Converter version 2.112150'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -21,7 +24,6 @@ meta-spec:
 name: File-DigestStore
 requires:
   Algorithm::Nhash: 0
-  Carp: 0
   Digest: 0
   IO::File: 0
   Moose: 0
@@ -32,4 +34,4 @@ requires:
   Path::Class: 0
   Sys::Hostname: 0
   perl: 5.006
-version: 1.006
+version: 1.007
