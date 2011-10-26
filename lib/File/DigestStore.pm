@@ -3,7 +3,7 @@ package File::DigestStore;
   $File::DigestStore::DIST = 'File-DigestStore';
 }
 {
-  $File::DigestStore::VERSION = '1.007';
+  $File::DigestStore::VERSION = '1.008';
 }
 # ABSTRACT: Digested hierarchical storage of files
 use Algorithm::Nhash;
@@ -164,7 +164,7 @@ sub _readfile {
     my $fh = IO::File->new($path, 'r')
         or confess "Can't read $path: $!";
     $fh->binmode($self->layers);
-    local $\;
+    local $/;
     # prepending "" covers the case of an empty file, otherwise we'd get undef
     return "".<$fh>;
 };
@@ -197,7 +197,7 @@ File::DigestStore - Digested hierarchical storage of files
 
 =head1 VERSION
 
-version 1.007
+version 1.008
 
 =head1 SYNOPSIS
 

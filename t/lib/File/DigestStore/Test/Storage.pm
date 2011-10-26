@@ -32,7 +32,7 @@ sub test_stable_file_hash : Test(no_plan) {
 sub test_stable_string_hash : Test(no_plan) {
     my($self) = @_;
 
-    foreach my $string ('', 'Hello, world') {
+    foreach my $string ('', 'Hello, world', "test\0string", "test\nstring", "test\rstring") {
         # also test scalar store_string
         my $id = $self->storer->store_string($string);
         # also test array store_string
